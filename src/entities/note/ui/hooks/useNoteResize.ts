@@ -69,7 +69,11 @@ export function useNoteResize({
         : Infinity;
 
       const nextWidth = clamp(initialWidth + deltaX, MIN_NOTE_WIDTH, maxWidth);
-      const nextHeight = clamp(initialHeight + deltaY, MIN_NOTE_HEIGHT, maxHeight);
+      const nextHeight = clamp(
+        initialHeight + deltaY,
+        MIN_NOTE_HEIGHT,
+        maxHeight,
+      );
       resizeState.finalWidth = nextWidth;
       resizeState.finalHeight = nextHeight;
       const noteElement = noteRef.current;
@@ -78,7 +82,7 @@ export function useNoteResize({
         noteElement.style.height = `${nextHeight}px`;
       }
     },
-    [noteRef]
+    [noteRef],
   );
 
   const handleResizeMouseUp = useCallback(() => {
@@ -88,7 +92,10 @@ export function useNoteResize({
         resizeState.finalWidth !== resizeState.initialWidth ||
         resizeState.finalHeight !== resizeState.initialHeight;
       if (didResize) {
-        callbacksRef.current.onResize?.(resizeState.finalWidth, resizeState.finalHeight);
+        callbacksRef.current.onResize?.(
+          resizeState.finalWidth,
+          resizeState.finalHeight,
+        );
       }
     }
     resizeStateRef.current = null;
@@ -114,7 +121,7 @@ export function useNoteResize({
       window.addEventListener('mousemove', handleResizeMouseMove);
       window.addEventListener('mouseup', handleResizeMouseUp, { once: true });
     },
-    [handleResizeMouseMove, handleResizeMouseUp, noteRef]
+    [handleResizeMouseMove, handleResizeMouseUp, noteRef],
   );
 
   useEffect(() => {

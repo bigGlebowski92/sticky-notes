@@ -1,5 +1,4 @@
-import { memo, useCallback, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import { memo, useCallback, useRef } from 'react';
 import type { Note } from '../model';
 import { useNoteDrag } from './hooks/useNoteDrag';
 import { useNoteResize } from './hooks/useNoteResize';
@@ -27,21 +26,15 @@ function NoteCardComponent({
     console.count(`render:NoteCard:${note.id}`);
   }
   const noteRef = useRef<HTMLDivElement | null>(null);
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const noteId = note.id;
-  const [draftText, setDraftText] = useState(note.text);
-
-  const handleTextChange = useCallback(
-    (event: ChangeEvent<HTMLTextAreaElement>) => {
-      setDraftText(event.target.value);
-    },
-    [],
-  );
 
   const handleTextBlur = useCallback(() => {
-    if (draftText !== note.text) {
-      onTextChange?.(noteId, draftText);
+    const nextText = textAreaRef.current?.value ?? '';
+    if (nextText !== note.text) {
+      onTextChange?.(noteId, nextText);
     }
-  }, [draftText, note.text, noteId, onTextChange]);
+  }, [note.text, noteId, onTextChange]);
   const { handleDragStart: handleDragMouseDown } = useNoteDrag({
     noteRef,
     x: note.x,
@@ -81,8 +74,8 @@ function NoteCardComponent({
         onMouseDown={handleDragMouseDown}
       />
       <textarea
-        value={draftText}
-        onChange={handleTextChange}
+        ref={textAreaRef}
+        defaultValue={note.text}
         onBlur={handleTextBlur}
         placeholder="Write a note..."
         className="note-card__text"

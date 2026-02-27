@@ -11,11 +11,15 @@ import { loadNotesFromStorage, saveNotesToStorage } from './storage';
 import { generateId } from '../../../shared';
 
 export function useNotes(initialNotes: Note[] = []) {
-  const [notes, setNotes] = useState<Note[]>(() => loadNotesFromStorage(initialNotes));
+  const [notes, setNotes] = useState<Note[]>(() =>
+    loadNotesFromStorage(initialNotes),
+  );
 
   const addNote = useCallback((x: number, y: number) => {
     setNotes((prev) => {
-      const maxZ = prev.length ? Math.max(...prev.map((n) => n.zIndex)) : BASE_Z_INDEX;
+      const maxZ = prev.length
+        ? Math.max(...prev.map((n) => n.zIndex))
+        : BASE_Z_INDEX;
       return [
         ...prev,
         {
@@ -33,9 +37,7 @@ export function useNotes(initialNotes: Note[] = []) {
   }, []);
 
   const updateNote = useCallback((id: string, patch: Partial<Note>) => {
-    setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, ...patch } : n))
-    );
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n)));
   }, []);
 
   const removeNote = useCallback((id: string) => {
@@ -50,7 +52,7 @@ export function useNotes(initialNotes: Note[] = []) {
       if (!target || target.zIndex === maxZ) return prev;
 
       return prev.map((n) =>
-        n.id === id ? { ...n, zIndex: maxZ + Z_INDEX_STEP } : n
+        n.id === id ? { ...n, zIndex: maxZ + Z_INDEX_STEP } : n,
       );
     });
   }, []);
