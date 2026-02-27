@@ -1,48 +1,64 @@
-import { useRef } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import type { Note } from '../model';
 import { useNoteDrag } from './hooks/useNoteDrag';
 import { useNoteResize } from './hooks/useNoteResize';
 
 interface NoteCardProps {
   note: Note;
-  onTextChange?: (text: string) => void;
-  onMove?: (x: number, y: number) => void;
-  onResize?: (width: number, height: number) => void;
-  onActivate?: () => void;
-  onDragStart?: (clientX: number, clientY: number) => void;
-  onDragMove?: (clientX: number, clientY: number) => void;
-  onDragEnd?: (clientX: number, clientY: number) => void;
+  onTextChange?: (id: string, text: string) => void;
+  onMove?: (id: string, x: number, y: number) => void;
+  onResize?: (id: string, width: number, height: number) => void;
+  onActivate?: (id: string) => void;
+  onDragMove?: (id: string, clientX: number, clientY: number) => void;
+  onDragEnd?: (id: string, clientX: number, clientY: number) => void;
 }
 
-export function NoteCard({
+function NoteCardComponent({
   note,
   onTextChange,
   onMove,
   onResize,
   onActivate,
-  onDragStart,
   onDragMove,
   onDragEnd,
 }: NoteCardProps) {
+  if (import.meta.env.DEV) {
+    console.count(`render:NoteCard:${note.id}`);
+  }
   const noteRef = useRef<HTMLDivElement | null>(null);
-  const { handleDragStart } = useNoteDrag({
+  const noteId = note.id;
+  const [draftText, setDraftText] = useState(note.text);
+
+  const handleTextChange = useCallback(
+    (event: ChangeEvent<HTMLTextAreaElement>) => {
+      setDraftText(event.target.value);
+    },
+    [],
+  );
+
+  const handleTextBlur = useCallback(() => {
+    if (draftText !== note.text) {
+      onTextChange?.(noteId, draftText);
+    }
+  }, [draftText, note.text, noteId, onTextChange]);
+  const { handleDragStart: handleDragMouseDown } = useNoteDrag({
     noteRef,
     x: note.x,
     y: note.y,
     width: note.width,
     height: note.height,
-    onMove,
-    onActivate,
-    onDragStart,
-    onDragMove,
-    onDragEnd,
+    onMove: (x: number, y: number) => onMove?.(noteId, x, y),
+    onActivate: () => onActivate?.(noteId),
+    onDragMove: (clientX: number, clientY: number) => onDragMove?.(noteId, clientX, clientY),
+    onDragEnd: (clientX: number, clientY: number) => onDragEnd?.(noteId, clientX, clientY),
   });
   const { handleResizeStart } = useNoteResize({
     noteRef,
     x: note.x,
     y: note.y,
-    onResize,
-    onActivate,
+    onResize: (width: number, height: number) => onResize?.(noteId, width, height),
+    onActivate: () => onActivate?.(noteId),
   });
 
   return (
@@ -58,15 +74,16 @@ export function NoteCard({
         zIndex: note.zIndex,
         backgroundColor: note.color,
       }}
-      onMouseDown={onActivate}
+      onMouseDown={() => onActivate?.(noteId)}
     >
       <div
         className="note-card__drag-handle"
-        onMouseDown={handleDragStart}
+        onMouseDown={handleDragMouseDown}
       />
       <textarea
-        value={note.text}
-        onChange={(e) => onTextChange?.(e.target.value)}
+        value={draftText}
+        onChange={handleTextChange}
+        onBlur={handleTextBlur}
         placeholder="Write a note..."
         className="note-card__text"
       />
@@ -74,3 +91,5 @@ export function NoteCard({
     </div>
   );
 }
+
+export const NoteCard = memo(NoteCardComponent);

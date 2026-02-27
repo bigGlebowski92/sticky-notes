@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   BASE_Z_INDEX,
   DEFAULT_NOTE_COLOR,
@@ -9,6 +9,23 @@ import {
 } from './constants';
 import type { Note } from './types';
 import { useNotes } from './useNotes';
+import { NOTES_STORAGE_KEY } from './storage';
+
+function createMockStorage() {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+  };
+}
 
 function createNote(id: string, zIndex = 1): Note {
   return {
@@ -24,6 +41,14 @@ function createNote(id: string, zIndex = 1): Note {
 }
 
 describe('useNotes', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'localStorage', {
+      value: createMockStorage(),
+      configurable: true,
+    });
+    window.localStorage.removeItem(NOTES_STORAGE_KEY);
+  });
+
   it('adds a note with default shape and increments z-index', () => {
     const existing = createNote('existing', 3);
     const { result } = renderHook(() => useNotes([existing]));
@@ -89,5 +114,51 @@ describe('useNotes', () => {
 
     const updatedLow = result.current.notes.find((n) => n.id === 'low');
     expect(updatedLow?.zIndex).toBe(high.zIndex + Z_INDEX_STEP);
+  });
+
+  it('restores notes from localStorage on load', () => {
+    const storedNote = createNote('stored', 5);
+    window.localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify([storedNote]));
+
+    const { result } = renderHook(() => useNotes());
+
+    expect(result.current.notes).toHaveLength(1);
+    expect(result.current.notes[0]).toMatchObject({
+      id: 'stored',
+      zIndex: 5,
+    });
+  });
+
+  it('falls back to initial notes when persisted payload is invalid', () => {
+    const fallback = createNote('fallback', 2);
+    window.localStorage.setItem(
+      NOTES_STORAGE_KEY,
+      JSON.stringify([{ id: 'broken', text: 'oops' }]),
+    );
+
+    const { result } = renderHook(() => useNotes([fallback]));
+
+    expect(result.current.notes).toHaveLength(1);
+    expect(result.current.notes[0]).toMatchObject({
+      id: 'fallback',
+      zIndex: 2,
+    });
+  });
+
+  it('restores only valid notes from a mixed persisted payload', () => {
+    const valid = createNote('valid', 4);
+    const invalid = { id: 'invalid', text: 'missing fields' };
+    window.localStorage.setItem(
+      NOTES_STORAGE_KEY,
+      JSON.stringify([valid, invalid]),
+    );
+
+    const { result } = renderHook(() => useNotes());
+
+    expect(result.current.notes).toHaveLength(1);
+    expect(result.current.notes[0]).toMatchObject({
+      id: 'valid',
+      zIndex: 4,
+    });
   });
 });

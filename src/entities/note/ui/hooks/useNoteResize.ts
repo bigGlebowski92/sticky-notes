@@ -8,6 +8,8 @@ interface ResizeState {
   startY: number;
   initialWidth: number;
   initialHeight: number;
+  finalWidth: number;
+  finalHeight: number;
 }
 
 interface UseNoteResizeParams {
@@ -40,24 +42,20 @@ export function useNoteResize({
     y,
   });
 
-  callbacksRef.current = {
-    onResize,
-    onActivate,
-    x,
-    y,
-  };
-
-  const stopResizing = useCallback(() => {
-    resizeStateRef.current = null;
-    window.removeEventListener('mousemove', handleResizeMouseMove);
-    window.removeEventListener('mouseup', handleResizeMouseUp);
-  }, []);
+  useEffect(() => {
+    callbacksRef.current = {
+      onResize,
+      onActivate,
+      x,
+      y,
+    };
+  }, [onResize, onActivate, x, y]);
 
   const handleResizeMouseMove = useCallback(
     (event: MouseEvent) => {
       const resizeState = resizeStateRef.current;
-      const { onResize: resizeCallback, x: noteX, y: noteY } = callbacksRef.current;
-      if (!resizeState || !resizeCallback) return;
+      const { x: noteX, y: noteY } = callbacksRef.current;
+      if (!resizeState) return;
 
       const { startX, startY, initialWidth, initialHeight } = resizeState;
       const deltaX = event.clientX - startX;
@@ -70,17 +68,32 @@ export function useNoteResize({
         ? Math.max(MIN_NOTE_HEIGHT, boardElement.clientHeight - noteY)
         : Infinity;
 
-      resizeCallback(
-        clamp(initialWidth + deltaX, MIN_NOTE_WIDTH, maxWidth),
-        clamp(initialHeight + deltaY, MIN_NOTE_HEIGHT, maxHeight)
-      );
+      const nextWidth = clamp(initialWidth + deltaX, MIN_NOTE_WIDTH, maxWidth);
+      const nextHeight = clamp(initialHeight + deltaY, MIN_NOTE_HEIGHT, maxHeight);
+      resizeState.finalWidth = nextWidth;
+      resizeState.finalHeight = nextHeight;
+      const noteElement = noteRef.current;
+      if (noteElement) {
+        noteElement.style.width = `${nextWidth}px`;
+        noteElement.style.height = `${nextHeight}px`;
+      }
     },
     [noteRef]
   );
 
   const handleResizeMouseUp = useCallback(() => {
-    stopResizing();
-  }, [stopResizing]);
+    const resizeState = resizeStateRef.current;
+    if (resizeState) {
+      const didResize =
+        resizeState.finalWidth !== resizeState.initialWidth ||
+        resizeState.finalHeight !== resizeState.initialHeight;
+      if (didResize) {
+        callbacksRef.current.onResize?.(resizeState.finalWidth, resizeState.finalHeight);
+      }
+    }
+    resizeStateRef.current = null;
+    window.removeEventListener('mousemove', handleResizeMouseMove);
+  }, [handleResizeMouseMove]);
 
   const handleResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -95,18 +108,22 @@ export function useNoteResize({
         startY: event.clientY,
         initialWidth: noteElement.offsetWidth,
         initialHeight: noteElement.offsetHeight,
+        finalWidth: noteElement.offsetWidth,
+        finalHeight: noteElement.offsetHeight,
       };
       window.addEventListener('mousemove', handleResizeMouseMove);
-      window.addEventListener('mouseup', handleResizeMouseUp);
+      window.addEventListener('mouseup', handleResizeMouseUp, { once: true });
     },
     [handleResizeMouseMove, handleResizeMouseUp, noteRef]
   );
 
   useEffect(() => {
     return () => {
-      stopResizing();
+      resizeStateRef.current = null;
+      window.removeEventListener('mousemove', handleResizeMouseMove);
+      window.removeEventListener('mouseup', handleResizeMouseUp);
     };
-  }, [stopResizing]);
+  }, [handleResizeMouseMove, handleResizeMouseUp]);
 
   return { handleResizeStart };
 }

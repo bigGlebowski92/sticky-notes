@@ -7,6 +7,8 @@ interface DragState {
   startY: number;
   initialNoteX: number;
   initialNoteY: number;
+  finalX: number;
+  finalY: number;
 }
 
 interface UseNoteDragParams {
@@ -17,7 +19,6 @@ interface UseNoteDragParams {
   height: number;
   onMove?: (x: number, y: number) => void;
   onActivate?: () => void;
-  onDragStart?: (clientX: number, clientY: number) => void;
   onDragMove?: (clientX: number, clientY: number) => void;
   onDragEnd?: (clientX: number, clientY: number) => void;
 }
@@ -25,7 +26,6 @@ interface UseNoteDragParams {
 interface DragCallbacks {
   onMove?: (x: number, y: number) => void;
   onActivate?: () => void;
-  onDragStart?: (clientX: number, clientY: number) => void;
   onDragMove?: (clientX: number, clientY: number) => void;
   onDragEnd?: (clientX: number, clientY: number) => void;
   width: number;
@@ -42,7 +42,6 @@ export function useNoteDrag({
   height,
   onMove,
   onActivate,
-  onDragStart,
   onDragMove,
   onDragEnd,
 }: UseNoteDragParams) {
@@ -50,35 +49,29 @@ export function useNoteDrag({
   const callbacksRef = useRef<DragCallbacks>({
     onMove,
     onActivate,
-    onDragStart,
     onDragMove,
     onDragEnd,
     width,
     height,
   });
 
-  callbacksRef.current = {
-    onMove,
-    onActivate,
-    onDragStart,
-    onDragMove,
-    onDragEnd,
-    width,
-    height,
-  };
-
-  const stopDragging = useCallback(() => {
-    dragStateRef.current = null;
-    window.removeEventListener('mousemove', handleDragMouseMove);
-    window.removeEventListener('mouseup', handleDragMouseUp);
-  }, []);
+  useEffect(() => {
+    callbacksRef.current = {
+      onMove,
+      onActivate,
+      onDragMove,
+      onDragEnd,
+      width,
+      height,
+    };
+  }, [onMove, onActivate, onDragMove, onDragEnd, width, height]);
 
   const handleDragMouseMove = useCallback(
     (event: MouseEvent) => {
       const dragState = dragStateRef.current;
-      const { onMove: moveCallback, onDragMove: dragMoveCallback, width: noteWidth, height: noteHeight } =
+      const { onDragMove: dragMoveCallback, width: noteWidth, height: noteHeight } =
         callbacksRef.current;
-      if (!dragState || !moveCallback) return;
+      if (!dragState) return;
 
       const { startX, startY, initialNoteX, initialNoteY } = dragState;
       const deltaX = event.clientX - startX;
@@ -88,17 +81,26 @@ export function useNoteDrag({
       const boardElement = noteRef.current?.offsetParent as HTMLElement | null;
 
       if (!boardElement) {
-        moveCallback(nextX, nextY);
+        dragState.finalX = nextX;
+        dragState.finalY = nextY;
+        const noteElement = noteRef.current;
+        if (noteElement) {
+          noteElement.style.transform = `translate3d(${nextX - dragState.initialNoteX}px, ${nextY - dragState.initialNoteY}px, 0)`;
+        }
         dragMoveCallback?.(event.clientX, event.clientY);
         return;
       }
 
       const maxX = Math.max(BOARD_MIN_COORDINATE, boardElement.clientWidth - noteWidth);
       const maxY = Math.max(BOARD_MIN_COORDINATE, boardElement.clientHeight - noteHeight);
-      moveCallback(
-        clamp(nextX, BOARD_MIN_COORDINATE, maxX),
-        clamp(nextY, BOARD_MIN_COORDINATE, maxY)
-      );
+      const clampedX = clamp(nextX, BOARD_MIN_COORDINATE, maxX);
+      const clampedY = clamp(nextY, BOARD_MIN_COORDINATE, maxY);
+      dragState.finalX = clampedX;
+      dragState.finalY = clampedY;
+      const noteElement = noteRef.current;
+      if (noteElement) {
+        noteElement.style.transform = `translate3d(${clampedX - dragState.initialNoteX}px, ${clampedY - dragState.initialNoteY}px, 0)`;
+      }
       dragMoveCallback?.(event.clientX, event.clientY);
     },
     [noteRef]
@@ -106,10 +108,23 @@ export function useNoteDrag({
 
   const handleDragMouseUp = useCallback(
     (event: MouseEvent) => {
+      const dragState = dragStateRef.current;
+      if (dragState) {
+        const didMove =
+          dragState.finalX !== dragState.initialNoteX || dragState.finalY !== dragState.initialNoteY;
+        if (didMove) {
+          callbacksRef.current.onMove?.(dragState.finalX, dragState.finalY);
+        }
+      }
+      const noteElement = noteRef.current;
+      if (noteElement) {
+        noteElement.style.transform = '';
+      }
       callbacksRef.current.onDragEnd?.(event.clientX, event.clientY);
-      stopDragging();
+      dragStateRef.current = null;
+      window.removeEventListener('mousemove', handleDragMouseMove);
     },
-    [stopDragging]
+    [handleDragMouseMove, noteRef]
   );
 
   const handleDragStart = useCallback(
@@ -121,19 +136,22 @@ export function useNoteDrag({
         startY: event.clientY,
         initialNoteX: x,
         initialNoteY: y,
+        finalX: x,
+        finalY: y,
       };
-      callbacksRef.current.onDragStart?.(event.clientX, event.clientY);
       window.addEventListener('mousemove', handleDragMouseMove);
-      window.addEventListener('mouseup', handleDragMouseUp);
+      window.addEventListener('mouseup', handleDragMouseUp, { once: true });
     },
     [handleDragMouseMove, handleDragMouseUp, x, y]
   );
 
   useEffect(() => {
     return () => {
-      stopDragging();
+      dragStateRef.current = null;
+      window.removeEventListener('mousemove', handleDragMouseMove);
+      window.removeEventListener('mouseup', handleDragMouseUp);
     };
-  }, [stopDragging]);
+  }, [handleDragMouseMove, handleDragMouseUp]);
 
   return { handleDragStart };
 }

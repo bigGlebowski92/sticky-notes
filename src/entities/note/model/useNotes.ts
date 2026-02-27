@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Note } from './types';
 import {
   DEFAULT_NOTE_WIDTH,
@@ -7,12 +7,13 @@ import {
   BASE_Z_INDEX,
   Z_INDEX_STEP,
 } from './constants';
+import { loadNotesFromStorage, saveNotesToStorage } from './storage';
 import { generateId } from '../../../shared';
 
 export function useNotes(initialNotes: Note[] = []) {
-  const [notes, setNotes] = useState<Note[]>(initialNotes);
+  const [notes, setNotes] = useState<Note[]>(() => loadNotesFromStorage(initialNotes));
 
-  const addNote = (x: number, y: number) => {
+  const addNote = useCallback((x: number, y: number) => {
     setNotes((prev) => {
       const maxZ = prev.length ? Math.max(...prev.map((n) => n.zIndex)) : BASE_Z_INDEX;
       return [
@@ -29,26 +30,34 @@ export function useNotes(initialNotes: Note[] = []) {
         },
       ];
     });
-  };
+  }, []);
 
-  const updateNote = (id: string, patch: Partial<Note>) => {
+  const updateNote = useCallback((id: string, patch: Partial<Note>) => {
     setNotes((prev) =>
       prev.map((n) => (n.id === id ? { ...n, ...patch } : n))
     );
-  };
+  }, []);
 
-  const removeNote = (id: string) => {
+  const removeNote = useCallback((id: string) => {
     setNotes((prev) => prev.filter((n) => n.id !== id));
-  };
+  }, []);
 
-  const bringToFront = (id: string) => {
+  const bringToFront = useCallback((id: string) => {
     setNotes((prev) => {
+      if (prev.length === 0) return prev;
       const maxZ = Math.max(...prev.map((n) => n.zIndex));
+      const target = prev.find((n) => n.id === id);
+      if (!target || target.zIndex === maxZ) return prev;
+
       return prev.map((n) =>
         n.id === id ? { ...n, zIndex: maxZ + Z_INDEX_STEP } : n
       );
     });
-  };
+  }, []);
+
+  useEffect(() => {
+    saveNotesToStorage(notes);
+  }, [notes]);
 
   return { notes, addNote, updateNote, removeNote, bringToFront };
 }

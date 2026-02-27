@@ -1,71 +1,55 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import type { Note } from '../../entities/note';
 import { NotesList } from '../notes-list';
+import { TrashZone, type TrashZoneHandle } from './TrashZone';
 
 interface NotesBoardProps {
   notes: Note[];
-  onTextChange?: (id: string, text: string) => void;
-  onMoveNote?: (id: string, x: number, y: number) => void;
-  onResizeNote?: (id: string, width: number, height: number) => void;
+  onUpdateNote?: (id: string, patch: Partial<Note>) => void;
   onActivateNote?: (id: string) => void;
   onDropInTrash?: (id: string) => void;
 }
 
 export function NotesBoard({
   notes,
-  onTextChange,
-  onMoveNote,
-  onResizeNote,
+  onUpdateNote,
   onActivateNote,
   onDropInTrash,
 }: NotesBoardProps) {
-  const trashRef = useRef<HTMLDivElement | null>(null);
-  const [isTrashActive, setIsTrashActive] = useState(false);
-  const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
+  if (import.meta.env.DEV) {
+    console.count('render:NotesBoard');
+  }
+  const trashZoneRef = useRef<TrashZoneHandle | null>(null);
 
-  const isPointerOverTrash = (clientX: number, clientY: number) => {
-    const trashRect = trashRef.current?.getBoundingClientRect();
-    if (!trashRect) return false;
-    return (
-      clientX >= trashRect.left &&
-      clientX <= trashRect.right &&
-      clientY >= trashRect.top &&
-      clientY <= trashRect.bottom
-    );
-  };
+  const handleNoteDragMove = useCallback(
+    (_id: string, clientX: number, clientY: number) => {
+      const isOverTrash =
+        trashZoneRef.current?.isPointerOver(clientX, clientY) ?? false;
+      trashZoneRef.current?.setActive(isOverTrash);
+    },
+    [],
+  );
 
-  console.log(notes, 'notes');
+  const handleNoteDragEnd = useCallback(
+    (id: string, clientX: number, clientY: number) => {
+      const isOverTrash =
+        trashZoneRef.current?.isPointerOver(clientX, clientY) ?? false;
+      if (isOverTrash) onDropInTrash?.(id);
+      trashZoneRef.current?.setActive(false);
+    },
+    [onDropInTrash],
+  );
 
   return (
     <div className="notes-board">
       <NotesList
         notes={notes}
-        onTextChange={onTextChange}
-        onMoveNote={onMoveNote}
-        onResizeNote={onResizeNote}
+        onUpdateNote={onUpdateNote}
         onActivateNote={onActivateNote}
-        onNoteDragStart={(id: string, clientX: number, clientY: number) => {
-          setDraggedNoteId(id);
-          setIsTrashActive(isPointerOverTrash(clientX, clientY));
-        }}
-        onNoteDragMove={(_: string, clientX: number, clientY: number) => {
-          setIsTrashActive(isPointerOverTrash(clientX, clientY));
-        }}
-        onNoteDragEnd={(id: string, clientX: number, clientY: number) => {
-          const isOverTrash = isPointerOverTrash(clientX, clientY);
-          if (isOverTrash) onDropInTrash?.(id);
-          setDraggedNoteId(null);
-          setIsTrashActive(false);
-        }}
+        onNoteDragMove={handleNoteDragMove}
+        onNoteDragEnd={handleNoteDragEnd}
       />
-      <div
-        ref={trashRef}
-        className={`trash-zone${isTrashActive ? ' trash-zone--active' : ''}${
-          draggedNoteId ? ' trash-zone--dragging' : ''
-        }`}
-      >
-        Drop here to delete
-      </div>
+      <TrashZone ref={trashZoneRef} />
     </div>
   );
 }
